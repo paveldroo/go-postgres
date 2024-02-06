@@ -5,22 +5,26 @@ import (
 	"fmt"
 	"github.com/julienschmidt/httprouter"
 	_ "github.com/lib/pq"
+	"html/template"
 	"log"
 	"net/http"
 	"strconv"
 )
 
 type Book struct {
-	isbn   string
-	title  string
-	author string
-	price  float64
+	Isbn   string
+	Title  string
+	Author string
+	Price  float32
 }
 
 var db *sql.DB
 var err error
+var tpl *template.Template
 
 func init() {
+	tpl = template.Must(template.ParseGlob("templates/*"))
+
 	db, err = sql.Open("postgres", "postgres://jonny:jonny_go@localhost:5432/bookstore?sslmode=disable")
 	if err != nil {
 		panic(err)
@@ -37,6 +41,7 @@ func main() {
 	r.GET("/books", getAll)
 	r.GET("/books/:isbn", get)
 	r.POST("/books/", insert)
+	r.PUT("/books/:id", update)
 	r.DELETE("/books/:id", del)
 	log.Fatal(http.ListenAndServe(":8000", r))
 
@@ -54,7 +59,7 @@ func getAll(w http.ResponseWriter, r *http.Request, _ httprouter.Params) {
 	bks := make([]Book, 0)
 	for rows.Next() {
 		b := Book{}
-		if err := rows.Scan(&b.isbn, &b.title, &b.author, &b.price); err != nil {
+		if err := rows.Scan(&b.Isbn, &b.Title, &b.Author, &b.Price); err != nil {
 			if err != nil {
 				log.Fatalln(err)
 				http.Error(w, http.StatusText(500), http.StatusInternalServerError)
@@ -72,17 +77,15 @@ func getAll(w http.ResponseWriter, r *http.Request, _ httprouter.Params) {
 		}
 	}
 
-	for _, b := range bks {
-		fmt.Fprintf(w, "%s, %s, %s, $%.2f\n", b.isbn, b.title, b.author, b.price)
-	}
+	tpl.ExecuteTemplate(w, "books.gohtml", bks)
 }
 
 func get(w http.ResponseWriter, r *http.Request, p httprouter.Params) {
 	bIsbn := p.ByName("isbn")
-	row := db.QueryRow("SELECT * FROM books WHERE isbn=$1", bIsbn)
+	row := db.QueryRow("SELECT * FROM books WHERE Isbn=$1", bIsbn)
 	b := Book{}
 
-	err := row.Scan(&b.isbn, &b.title, &b.author, &b.price)
+	err := row.Scan(&b.Isbn, &b.Title, &b.Author, &b.Price)
 	switch {
 	case err == sql.ErrNoRows:
 		http.NotFound(w, r)
@@ -92,35 +95,61 @@ func get(w http.ResponseWriter, r *http.Request, p httprouter.Params) {
 		http.Error(w, http.StatusText(500), http.StatusInternalServerError)
 		return
 	}
-	fmt.Fprintf(w, "%s, %s, %s, $%.2f\n", b.isbn, b.title, b.author, b.price)
+	tpl.ExecuteTemplate(w, "show.gohtml", b)
 }
 
 func insert(w http.ResponseWriter, r *http.Request, _ httprouter.Params) {
 	b := Book{}
 
-	b.isbn = r.FormValue("isbn")
-	b.title = r.FormValue("title")
-	b.author = r.FormValue("author")
-	ps, err := strconv.ParseFloat(r.FormValue("price"), 64)
+	b.Isbn = r.FormValue("isbn")
+	b.Title = r.FormValue("title")
+	b.Author = r.FormValue("author")
+	p64, err := strconv.ParseFloat(r.FormValue("price"), 32)
 	if err != nil {
-		http.Error(w, "Wrong price format", http.StatusUnprocessableEntity)
+		http.Error(w, "Wrong Price format", http.StatusUnprocessableEntity)
 		return
 	}
-	b.price = ps
+	b.Price = float32(p64)
 
-	if b.isbn == "" || b.title == "" || b.author == "" {
+	if b.Isbn == "" || b.Title == "" || b.Author == "" {
 		http.Error(w, "Wrong book data", http.StatusUnprocessableEntity)
 		return
 	}
 
-	_, err = db.Exec("INSERT INTO books VALUES ($1, $2, $3, $4)", b.isbn, b.title, b.author, b.price)
-	fmt.Fprintf(w, "Book %s, %s, %s, $%.2f successfully created!", b.isbn, b.title, b.author, b.price)
+	_, err = db.Exec("INSERT INTO books (isbn, title, author, price) VALUES ($1, $2, $3, $4)", b.Isbn, b.Title, b.Author, b.Price)
+	if err != nil {
+		log.Fatalln(err)
+		http.Error(w, http.StatusText(500), http.StatusInternalServerError)
+	}
+	tpl.ExecuteTemplate(w, "created.gohtml", b)
 
+}
+
+func update(w http.ResponseWriter, r *http.Request, p httprouter.Params) {
+	b := Book{}
+
+	b.Isbn = r.FormValue("isbn")
+	b.Title = r.FormValue("title")
+	b.Author = r.FormValue("author")
+	p64, err := strconv.ParseFloat(r.FormValue("price"), 32)
+	if err != nil {
+		http.Error(w, "Wrong Price format", http.StatusUnprocessableEntity)
+		return
+	}
+	b.Price = float32(p64)
+
+	if b.Isbn == "" || b.Title == "" || b.Author == "" {
+		http.Error(w, "Wrong book data", http.StatusUnprocessableEntity)
+		return
+	}
+
+	_, err = db.Exec("UPDATE books VALUES ($1, $2, $3, $4)", b.Isbn, b.Title, b.Author, b.Price)
+	fmt.Fprintf(w, "Book %s, %s, %s, $%.2f successfully updated!", b.Isbn, b.Title, b.Author, b.Price)
 }
 
 func del(w http.ResponseWriter, r *http.Request, p httprouter.Params) {
 	bIsbn := p.ByName("isbn")
-	_, err := db.Exec("DELETE FROM books WHERE isbn=$1", bIsbn)
+	_, err := db.Exec("DELETE FROM books WHERE Isbn=$1", bIsbn)
 	if err != nil {
 		http.NotFound(w, r)
 	}
