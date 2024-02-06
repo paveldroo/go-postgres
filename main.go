@@ -7,13 +7,14 @@ import (
 	_ "github.com/lib/pq"
 	"log"
 	"net/http"
+	"strconv"
 )
 
 type Book struct {
 	isbn   string
 	title  string
 	author string
-	price  float32
+	price  float64
 }
 
 var db *sql.DB
@@ -35,7 +36,7 @@ func main() {
 	r := httprouter.New()
 	r.GET("/books", getAll)
 	r.GET("/books/:isbn", get)
-	r.POST("/books/", create)
+	r.POST("/books/", insert)
 	r.DELETE("/books/:id", del)
 	log.Fatal(http.ListenAndServe(":8000", r))
 
@@ -94,7 +95,26 @@ func get(w http.ResponseWriter, r *http.Request, p httprouter.Params) {
 	fmt.Fprintf(w, "%s, %s, %s, $%.2f\n", b.isbn, b.title, b.author, b.price)
 }
 
-func create(w http.ResponseWriter, r *http.Request, _ httprouter.Params) {
+func insert(w http.ResponseWriter, r *http.Request, _ httprouter.Params) {
+	b := Book{}
+
+	b.isbn = r.FormValue("isbn")
+	b.title = r.FormValue("title")
+	b.author = r.FormValue("author")
+	ps, err := strconv.ParseFloat(r.FormValue("price"), 64)
+	if err != nil {
+		http.Error(w, "Wrong price format", http.StatusUnprocessableEntity)
+		return
+	}
+	b.price = ps
+
+	if b.isbn == "" || b.title == "" || b.author == "" {
+		http.Error(w, "Wrong book data", http.StatusUnprocessableEntity)
+		return
+	}
+
+	_, err = db.Exec("INSERT INTO books VALUES ($1, $2, $3, $4)", b.isbn, b.title, b.author, b.price)
+	fmt.Fprintf(w, "Book %s, %s, %s, $%.2f successfully created!", b.isbn, b.title, b.author, b.price)
 
 }
 
