@@ -81,13 +81,12 @@ func get(w http.ResponseWriter, r *http.Request, p httprouter.Params) {
 	row := db.QueryRow("SELECT * FROM books WHERE isbn=$1", bIsbn)
 	b := Book{}
 
-	if err := row.Scan(&b.isbn, &b.title, &b.author, &b.price); err != nil {
-		log.Fatalln(err)
-		http.Error(w, http.StatusText(500), http.StatusInternalServerError)
+	err := row.Scan(&b.isbn, &b.title, &b.author, &b.price)
+	switch {
+	case err == sql.ErrNoRows:
+		http.NotFound(w, r)
 		return
-	}
-
-	if err = row.Err(); err != nil {
+	case err != nil:
 		log.Fatalln(err)
 		http.Error(w, http.StatusText(500), http.StatusInternalServerError)
 		return
