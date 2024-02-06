@@ -34,7 +34,7 @@ func init() {
 func main() {
 	r := httprouter.New()
 	r.GET("/books", getAll)
-	r.GET("/books/:id", get)
+	r.GET("/books/:isbn", get)
 	r.POST("/books/", create)
 	r.DELETE("/books/:id", del)
 	log.Fatal(http.ListenAndServe(":8000", r))
@@ -77,30 +77,22 @@ func getAll(w http.ResponseWriter, r *http.Request, _ httprouter.Params) {
 }
 
 func get(w http.ResponseWriter, r *http.Request, p httprouter.Params) {
-	bId := p.ByName("id")
-	rows, err := db.Query("SELECT * FROM books WHERE isbn=?", bId)
-	if err != nil {
-		log.Fatal(err)
-	}
-	bks := make([]Book, 0)
-	for rows.Next() {
-		b := Book{}
-		if err := rows.Scan(&b.isbn, &b.title, &b.author, &b.price); err != nil {
-			log.Fatal(err)
-		}
-		if err != nil {
-			log.Fatal(err)
-		}
-		bks = append(bks, b)
+	bIsbn := p.ByName("isbn")
+	row := db.QueryRow("SELECT * FROM books WHERE isbn=$1", bIsbn)
+	b := Book{}
+
+	if err := row.Scan(&b.isbn, &b.title, &b.author, &b.price); err != nil {
+		log.Fatalln(err)
+		http.Error(w, http.StatusText(500), http.StatusInternalServerError)
+		return
 	}
 
-	if err = rows.Err(); err != nil {
-		panic(err)
+	if err = row.Err(); err != nil {
+		log.Fatalln(err)
+		http.Error(w, http.StatusText(500), http.StatusInternalServerError)
+		return
 	}
-
-	for _, b := range bks {
-		fmt.Printf("%s, %s, %s, $%.2f\n", b.isbn, b.title, b.author, b.price)
-	}
+	fmt.Fprintf(w, "%s, %s, %s, $%.2f\n", b.isbn, b.title, b.author, b.price)
 }
 
 func create(w http.ResponseWriter, r *http.Request, _ httprouter.Params) {
