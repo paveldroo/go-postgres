@@ -7,7 +7,7 @@ import (
 )
 
 func main() {
-	db, err := sql.Open("postgres", "postgres://postgres:mysecretpassword@localhost:5432/golang?sslmode=disable")
+	db, err := sql.Open("postgres", "postgres://jonny:jonny_go@localhost:5432/bookstore?sslmode=disable")
 	if err != nil {
 		panic(err)
 	}
