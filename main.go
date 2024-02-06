@@ -119,5 +119,11 @@ func insert(w http.ResponseWriter, r *http.Request, _ httprouter.Params) {
 }
 
 func del(w http.ResponseWriter, r *http.Request, p httprouter.Params) {
+	bIsbn := p.ByName("isbn")
+	_, err := db.Exec("DELETE FROM books WHERE isbn=$1", bIsbn)
+	if err != nil {
+		http.NotFound(w, r)
+	}
 
+	fmt.Fprintf(w, "Book %s successfully deleted!", bIsbn)
 }
